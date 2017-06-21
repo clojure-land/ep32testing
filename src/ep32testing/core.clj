@@ -1,28 +1,36 @@
 (ns ep32testing.core)
 
-(defn assert= [x y]
-  (when (not= x y)
-    (throw (AssertionError. (str "Expected " (pr-str y)
-                                 " but got " (pr-str x))))))
+(declare ^:dynamic *test-results*)
+
+(defn update-report! [& args]
+  (apply swap! *test-results* update args))
 
 (defmacro defcheck [name & body]
   `(defn ~(with-meta name {:test `(var ~name)}) []
      ~@body))
 
-(defcheck test-a-thing
-  (assert= 5 6))
+(defn assert= [x y]
+  (update-report! :assertions inc)
+  (if (= x y)
+    (update-report! :pass inc)
+    (do
+      (update-report! :fail inc)
+      (update-report! :messages conj
+                      (str "Expected " (pr-str y)
+                           " but got " (pr-str x))))))
 
-(macroexpand-1 '(defcheck test-a-thing
-                  (assert= 5 6)))
-;;=> (clojure.core/defn test-a-thing [] (assert= 5 6))
-
-(meta #'test-a-thing)
-;;=> {:test #'ep32testing.core/test-a-thing, :arglists ([]), :line 12, :column 1, :file "/home/arne/ep32testing/src/ep32testing/core.clj", :name test-a-thing, :ns #namespace[ep32testing.core]}
+(defn- print-report! [{:keys [assertions tests pass fail messages]}]
+  (run! #(println % "\n\n") messages)
+  (println "Ran" tests "tests containing" assertions "assertions.")
+  (println fail "failures."))
 
 (defn run-all-tests []
-  (doseq [test (->> (all-ns)
-                    (mapcat ns-interns)
-                    (keep #(-> % second meta :test)))]
-    (test)))
+  (binding [*test-results* (atom {:assertions 0 :tests 0 :pass 0 :fail 0 :messages []})]
+    (doseq [test (->> (all-ns)
+                      (mapcat ns-interns)
+                      (keep #(-> % second meta :test)))]
+      (update-report! :tests inc)
+      (test))
+    (print-report! @*test-results*)))
 
 (run-all-tests)
