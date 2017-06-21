@@ -5,27 +5,24 @@
     (throw (AssertionError. (str "Expected " (pr-str y)
                                  " but got " (pr-str x))))))
 
-(defn hiccup->cljxml [h]
-  {:pre [(or (vector? h) (string? h))]}
-  (if (vector? h)
-    (let [attrs?  (map? (second h))
-          attrs   (if attrs? (second h) {})
-          content (drop (if attrs? 2 1) h)]
-      {:tag (first h), :attrs attrs, :content (map hiccup->cljxml content)})
-    h))
+(defmacro defcheck [name & body]
+  `(defn ~(with-meta name {:test `(var ~name)}) []
+     ~@body))
 
-(defn test-hiccup->cljxml []
-  (assert= (hiccup->cljxml [:p]) {:tag :p, :attrs {}, :content ()})
-  (assert= (hiccup->cljxml [:div]) {:tag :div, :attrs {}, :content ()})
-  (assert= (hiccup->cljxml [:p "hello!"]) {:tag :p, :attrs {}, :content '("hello!")})
-  (assert= (hiccup->cljxml [:p {:class "info"} "hello!"])
-           {:tag :p, :attrs {:class "info"}, :content '("hello!")})
-  (assert= (hiccup->cljxml [:p [:strong "hello"]])
-           {:tag :p,
-            :attrs {},
-            :content '({:tag :strong,
-                        :attrs {},
-                        :content ("hello")})}))
+(defcheck test-a-thing
+  (assert= 5 6))
 
-(comment
-  (test-hiccup->cljxml))
+(macroexpand-1 '(defcheck test-a-thing
+                  (assert= 5 6)))
+;;=> (clojure.core/defn test-a-thing [] (assert= 5 6))
+
+(meta #'test-a-thing)
+;;=> {:test #'ep32testing.core/test-a-thing, :arglists ([]), :line 12, :column 1, :file "/home/arne/ep32testing/src/ep32testing/core.clj", :name test-a-thing, :ns #namespace[ep32testing.core]}
+
+(defn run-all-tests []
+  (doseq [test (->> (all-ns)
+                    (mapcat ns-interns)
+                    (keep #(-> % second meta :test)))]
+    (test)))
+
+(run-all-tests)
